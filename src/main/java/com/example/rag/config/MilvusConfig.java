@@ -19,11 +19,9 @@ public class MilvusConfig {
     @Value("${milvus.port:19530}")
     private int port;
 
-    @Value("${milvus.collection-name:rag_documents}")
-    private String collectionName;
-
-    @Value("${milvus.dimension:2048}")
-    private int dimension;
+    // 扩展建议：如果你使用的是 Zilliz Cloud 或者设置了密码的 Milvus，最好预留 token 配置
+    @Value("${milvus.token:}")
+    private String token;
 
     /**
      * 配置 Milvus Client
@@ -31,28 +29,20 @@ public class MilvusConfig {
      */
     @Bean
     public MilvusClientV2 milvusClient() {
-        ConnectConfig connectConfig = ConnectConfig.builder()
-                .uri(host + ":" + port)
-                .build();
+        // 修复：补全 http:// 协议头，这是 V2 SDK 推荐的标准写法
+        String uri = "http://" + host + ":" + port;
 
-        return new MilvusClientV2(connectConfig);
+        ConnectConfig.ConnectConfigBuilder builder = ConnectConfig.builder()
+                .uri(uri);
+
+        // 如果配置文件中配置了密码/Token，则注入
+        if (token != null && !token.trim().isEmpty()) {
+            builder.token(token);
+        }
+
+        return new MilvusClientV2(builder.build());
     }
 
-    /**
-     * 获取集合名称
-     * @return 集合名称
-     */
-    @Bean
-    public String milvusCollectionName() {
-        return collectionName;
-    }
-
-    /**
-     * 获取向量维度
-     * @return 向量维度
-     */
-    @Bean
-    public int milvusDimension() {
-        return dimension;
-    }
+    // 删除了 milvusCollectionName() 和 milvusDimension() 这两个 Bean
+    // 因为你在 Service 已经通过 @Value 直接获取了，不需要把它们放进 Spring 容器中
 }
