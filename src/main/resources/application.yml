@@ -9,7 +9,7 @@ spring:
       # Chat API 使用原生兼容接口
       base-url: https://ark.cn-beijing.volces.com/api/v3
       # 你的火山引擎API Key
-      api-key: ${VOLCENGINE_API_KEY:9492e107-3b6c-4d8a-a572-a2e9a130291a}
+      api-key: ${ARK_API_KEY}
       # Embedding配置 - 禁用自动配置，使用自定义实现
       embedding:
         enabled: false
@@ -26,7 +26,7 @@ spring:
 
 # 自定义配置
 volcengine:
-  api-key: ${ARK_API_KEY:9492e107-3b6c-4d8a-a572-a2e9a130291a}
+  api-key: ${ARK_API_KEY}
   embedding:
     # Embedding端点（多模态模型）
     model: ep-20260420014217-l6bqr
