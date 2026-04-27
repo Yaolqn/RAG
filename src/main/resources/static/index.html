@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG 知识库问答系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            background: #f8f9ff;
+            border-color: #764ba2;
+        }
+
+        .upload-area.dragover {
+            background: #f0f0ff;
+            border-color: #764ba2;
+        }
+
+        .upload-area p {
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .chat-input-area input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .chat-messages {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+
+        .message.user {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+        }
+
+        .message.assistant {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .message .label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-item {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-item .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-item .label {
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📚 RAG 知识库问答系统</h1>
+            <p>基于火山引擎多模态嵌入的智能问答系统</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">服务运行在端口: 8081</p>
+        </div>
+
+        <div class="card">
+            <h2>📄 文档上传</h2>
+            <div class="upload-area" id="uploadArea">
+                <p>拖拽文件到此处或点击选择文件</p>
+                <p style="font-size: 0.9em; color: #999;">支持 PDF、TXT、DOCX 等格式</p>
+                <input type="file" id="fileInput" accept=".pdf,.txt,.docx,.doc">
+            </div>
+            <div class="status" id="uploadStatus"></div>
+            
+            <div class="stats" id="stats">
+                <div class="stat-item">
+                    <div class="value" id="totalChunks">0</div>
+                    <div class="label">文档块总数</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>💬 智能问答</h2>
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="chatInput" placeholder="请输入您的问题...">
+                    <button class="btn" id="sendBtn" onclick="sendMessage()">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🔧 系统操作</h2>
+            <button class="btn" onclick="clearVectorStore()" style="background: #f44336;">清空向量库</button>
+            <button class="btn" onclick="checkStatus()" style="background: #4CAF50;">检查状态</button>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const chatInput = document.getElementById('chatInput');
+        const chatMessages = document.getElementById('chatMessages');
+        const sendBtn = document.getElementById('sendBtn');
+        const totalChunksEl = document.getElementById('totalChunks');
+
+        // 文件上传相关
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                uploadFile(e.target.files[0]);
+            }
+        });
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            uploadStatus.className = 'status';
+            uploadStatus.innerHTML = '<span class="loading"></span> 正在上传和处理文档...';
+            uploadStatus.style.display = 'block';
+
+            try {
+                const response = await fetch('/api/rag/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    uploadStatus.className = 'status success';
+                    uploadStatus.textContent = `✓ ${result.message} - 共生成 ${result.chunks} 个文档块`;
+                    totalChunksEl.textContent = result.totalChunks;
+                } else {
+                    uploadStatus.className = 'status error';
+                    uploadStatus.textContent = `✗ ${result.message}`;
+                }
+            } catch (error) {
+                uploadStatus.className = 'status error';
+                uploadStatus.textContent = `✗ 上传失败: ${error.message}`;
+            }
+        }
+
+        // 聊天相关
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        async function sendMessage() {
+            const message = chatInput.value.trim();
+            if (!message) return;
+
+            addMessage('user', message);
+            chatInput.value = '';
+            sendBtn.disabled = true;
+
+            try {
+                const response = await fetch(`/api/rag/chat?message=${encodeURIComponent(message)}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    addMessage('assistant', result.response);
+                } else {
+                    addMessage('assistant', `错误: ${result.message}`);
+                }
+            } catch (error) {
+                addMessage('assistant', `请求失败: ${error.message}`);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        function addMessage(role, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.innerHTML = `
+                <div class="label">${role === 'user' ? '用户' : '助手'}</div>
+                <div class="content">${content}</div>
+            `;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 系统操作
+        async function clearVectorStore() {
+            if (!confirm('确定要清空向量库吗？')) return;
+
+            try {
+                const response = await fetch('/api/rag/clear', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('向量库已清空');
+                    totalChunksEl.textContent = '0';
+                    chatMessages.innerHTML = '';
+                } else {
+                    alert(`清空失败: ${result.message}`);
+                }
+            } catch (error) {
+                alert(`清空失败: ${error.message}`);
+            }
+        }
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/rag/status');
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`系统状态正常\n文档块总数: ${result.totalChunks}`);
+                    totalChunksEl.textContent = result.totalChunks;
+                } else {
+                    alert(`状态检查失败: ${result.message}`);
+                }
+            } catch (error) {
+                alert(`状态检查失败: ${error.message}`);
+            }
+        }
+
+        // 页面加载时检查状态
+        window.onload = checkStatus;
+    </script>
+</body>
+</html>

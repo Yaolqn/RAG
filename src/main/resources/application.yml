@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: RAG
+
+  # 配置火山引擎（豆包）的API
+  ai:
+    openai:
+      # 火山引擎网关地址
+      # Chat API 使用原生兼容接口
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      # 你的火山引擎API Key
+      api-key: ${VOLCENGINE_API_KEY:9492e107-3b6c-4d8a-a572-a2e9a130291a}
+      # Embedding配置 - 禁用自动配置，使用自定义实现
+      embedding:
+        enabled: false
+      # Chat模型（豆包的对话模型）
+      chat:
+        options:
+          model: ${CHAT_MODEL:ep-20260419235315-sv4kp}  # 替换为你的推理端点ID
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# 自定义配置
+volcengine:
+  api-key: ${ARK_API_KEY:9492e107-3b6c-4d8a-a572-a2e9a130291a}
+  embedding:
+    # Embedding端点（多模态模型）
+    model: ep-20260420014217-l6bqr
+  chat:
+    # Chat端点（对话模型）
+    model: ep-20260419235315-sv4kp
+
+
+# 服务器端口配置
+server:
+  port: 8081
