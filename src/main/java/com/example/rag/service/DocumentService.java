@@ -20,8 +20,10 @@ public class DocumentService {
 
     private final Tika tika = new Tika();  // Apache Tika 文本提取工具
     
-    private static final int CHUNK_SIZE = 500;  // 文档块大小
-    private static final int CHUNK_OVERLAP = 50;  // 文档块重叠大小
+    private static final int MIN_CHUNK_SIZE = 200;  // 最小块大小
+    private static final int MAX_CHUNK_SIZE = 800;  // 最大块大小
+    private static final int TARGET_CHUNK_SIZE = 500;  // 目标块大小
+    private static final int CHUNK_OVERLAP = 100;  // 块重叠大小（保持上下文连续性）
 
     /**
  * 从上传的文件中提取文本
@@ -46,35 +48,163 @@ public class DocumentService {
     }
 
     /**
- * 将文本分割成多个块
+ * 将文本分割成多个块（改进的语义分块策略）
+ * 优先在段落边界分割，动态调整块大小，添加重叠保持上下文
  * @param text 输入文本
  * @return 文本块列表
  */
     public List<String> splitText(String text) {
         List<String> chunks = new ArrayList<>();
         
-        // 按句子分割文本
-        String[] sentences = text.split("(?<=[。！？.!?])\\s*");
+        // 先按段落分割（保持段落完整性）
+        String[] paragraphs = text.split("\\n\\s*\\n");
+        
+        for (String paragraph : paragraphs) {
+            if (paragraph.trim().isEmpty()) {
+                continue;
+            }
+            
+            // 如果段落本身在目标大小范围内，直接作为一个块
+            if (paragraph.length() >= MIN_CHUNK_SIZE && paragraph.length() <= MAX_CHUNK_SIZE) {
+                chunks.add(paragraph.trim());
+                continue;
+            }
+            
+            // 如果段落太长，按句子分割
+            if (paragraph.length() > MAX_CHUNK_SIZE) {
+                List<String> paragraphChunks = splitLongParagraph(paragraph);
+                chunks.addAll(paragraphChunks);
+            }
+            
+            // 如果段落太短，尝试与下一段合并
+            if (paragraph.length() < MIN_CHUNK_SIZE) {
+                // 暂时添加，后续会合并
+                chunks.add(paragraph.trim());
+            }
+        }
+        
+        // 合并过短的块
+        chunks = mergeSmallChunks(chunks);
+        
+        // 添加重叠（保持上下文连续性）
+        chunks = addOverlap(chunks);
+        
+        return chunks;
+    }
+    
+    /**
+ * 分割过长的段落
+ * @param paragraph 过长的段落
+ * @return 分割后的块列表
+ */
+    private List<String> splitLongParagraph(String paragraph) {
+        List<String> chunks = new ArrayList<>();
+        
+        // 按句子分割
+        String[] sentences = paragraph.split("(?<=[。！？.!?])\\s*");
         StringBuilder currentChunk = new StringBuilder();
         
-        // 遍历所有句子，按CHUNK_SIZE限制进行分块
-        // 当当前块加上下一句超过大小时，保存当前块并开始新块
         for (String sentence : sentences) {
-            if (currentChunk.length() + sentence.length() > CHUNK_SIZE) {
-                if (currentChunk.length() > 0) {
-                    chunks.add(currentChunk.toString());
-                }
-                currentChunk = new StringBuilder(sentence);
+            String trimmedSentence = sentence.trim();
+            if (trimmedSentence.isEmpty()) {
+                continue;
+            }
+            
+            // 如果添加这句会超过最大限制，保存当前块
+            if (currentChunk.length() + trimmedSentence.length() > MAX_CHUNK_SIZE && currentChunk.length() >= MIN_CHUNK_SIZE) {
+                chunks.add(currentChunk.toString().trim());
+                currentChunk = new StringBuilder(trimmedSentence);
             } else {
-                currentChunk.append(sentence);
+                currentChunk.append(trimmedSentence);
+            }
+        }
+        
+        // 添加最后一个块
+        if (currentChunk.length() > 0) {
+            chunks.add(currentChunk.toString().trim());
+        }
+        
+        return chunks;
+    }
+    
+    /**
+ * 合并过短的块
+ * @param chunks 原始块列表
+ * @return 合并后的块列表
+ */
+    private List<String> mergeSmallChunks(List<String> chunks) {
+        List<String> mergedChunks = new ArrayList<>();
+        StringBuilder currentChunk = new StringBuilder();
+        
+        for (String chunk : chunks) {
+            if (currentChunk.length() + chunk.length() <= TARGET_CHUNK_SIZE) {
+                if (currentChunk.length() > 0) {
+                    currentChunk.append("\n\n");
+                }
+                currentChunk.append(chunk);
+            } else {
+                if (currentChunk.length() > 0) {
+                    mergedChunks.add(currentChunk.toString());
+                }
+                currentChunk = new StringBuilder(chunk);
             }
         }
         
         if (currentChunk.length() > 0) {
-            chunks.add(currentChunk.toString());
+            mergedChunks.add(currentChunk.toString());
         }
         
-        return chunks;
+        return mergedChunks;
+    }
+    
+    /**
+ * 为块添加重叠内容，保持上下文连续性
+ * @param chunks 原始块列表
+ * @return 添加重叠后的块列表
+ */
+    private List<String> addOverlap(List<String> chunks) {
+        if (chunks.size() <= 1) {
+            return chunks;
+        }
+        
+        List<String> overlappedChunks = new ArrayList<>();
+        
+        for (int i = 0; i < chunks.size(); i++) {
+            String chunk = chunks.get(i);
+            
+            // 如果不是第一个块，添加前一个块的尾部作为重叠
+            if (i > 0) {
+                String previousChunk = chunks.get(i - 1);
+                String overlap = getOverlapText(previousChunk, CHUNK_OVERLAP);
+                chunk = overlap + "\n\n" + chunk;
+            }
+            
+            overlappedChunks.add(chunk);
+        }
+        
+        return overlappedChunks;
+    }
+    
+    /**
+ * 获取文本的尾部重叠部分
+ * @param text 原始文本
+ * @param overlapSize 重叠大小
+ * @return 重叠文本
+ */
+    private String getOverlapText(String text, int overlapSize) {
+        if (text.length() <= overlapSize) {
+            return text;
+        }
+        
+        // 从尾部开始查找句子边界
+        String tail = text.substring(text.length() - overlapSize);
+        int firstSentenceEnd = tail.indexOf('。');
+        
+        if (firstSentenceEnd > 0) {
+            return tail.substring(firstSentenceEnd + 1).trim();
+        }
+        
+        return tail.trim();
     }
 
     /**
