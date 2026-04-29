@@ -21,8 +21,8 @@ spring:
   # 文件上传配置
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
+      max-file-size: 100MB
+      max-request-size: 100MB
 
   # Redis 配置
   data:
@@ -30,7 +30,7 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
-      database: 2
+      database: 0
       timeout: 3000ms
       jedis:
         pool:

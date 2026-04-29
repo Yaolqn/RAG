@@ -34,8 +34,18 @@ public class RagService {
  * @return 生成的答案
  */
     public String chat(String query) {
+        return chat(query, null);
+    }
+
+    /**
+ * 基于检索增强生成回答用户问题（支持文档隔离）
+ * @param query 用户问题
+ * @param documentId 文档ID（可选，如果指定则只在该文档内搜索）
+ * @return 生成的答案
+ */
+    public String chat(String query, String documentId) {
         // 检索相关文档块
-        List<DocumentChunk> relevantChunks = retrievalService.retrieve(query, 3);
+        List<DocumentChunk> relevantChunks = retrievalService.retrieve(query, 3, documentId);
         // 格式化检索到的上下文
         String context = retrievalService.formatContext(relevantChunks);
 

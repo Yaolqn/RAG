@@ -27,10 +27,21 @@ public class RetrievalService {
  * @return 相关文档块列表
  */
     public List<DocumentChunk> retrieve(String query, int topK) {
+        return retrieve(query, topK, null);
+    }
+
+    /**
+ * 根据查询检索相关文档块（支持文档隔离）
+ * @param query 用户查询
+ * @param topK 返回的最相关文档块数量
+ * @param documentId 文档ID（可选，如果指定则只在该文档内搜索）
+ * @return 相关文档块列表
+ */
+    public List<DocumentChunk> retrieve(String query, int topK, String documentId) {
         // 生成查询的嵌入向量
         List<Float> queryEmbedding = embeddingService.generateEmbedding(query);
         // 在向量存储中搜索相似文档块
-        return vectorStoreService.similaritySearch(queryEmbedding, topK);
+        return vectorStoreService.similaritySearch(queryEmbedding, topK, documentId);
     }
 
     /**

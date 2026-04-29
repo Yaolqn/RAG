@@ -8,6 +8,7 @@ import java.util.List;
  */
 public class DocumentChunk {
     private String id;  // 文档块唯一 ID
+    private String documentId;  // 文档唯一 ID（用于文档隔离）
     private String content;  // 文档块内容
     private List<Float> embedding;  // 嵌入向量
     private String source;  // 文档来源（文件名）
@@ -20,8 +21,9 @@ public class DocumentChunk {
     }
 
     // 全参构造函数
-    public DocumentChunk(String id, String content, List<Float> embedding, String source, int chunkIndex, int totalChunks) {
+    public DocumentChunk(String id, String documentId, String content, List<Float> embedding, String source, int chunkIndex, int totalChunks) {
         this.id = id;
+        this.documentId = documentId;
         this.content = content;
         this.embedding = embedding;
         this.source = source;
@@ -35,6 +37,14 @@ public class DocumentChunk {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getDocumentId() {
+        return documentId;
+    }
+
+    public void setDocumentId(String documentId) {
+        this.documentId = documentId;
     }
 
     public String getContent() {

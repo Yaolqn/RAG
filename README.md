@@ -6,13 +6,19 @@
 
 本项目实现了一个完整的 RAG（Retrieval-Augmented Generation）系统，通过以下流程实现文档问答：
 
-1. **文档上传**：用户上传 PDF 文档
+1. **文档上传**：用户上传 PDF 文档，系统为每个文档生成唯一ID
 2. **文本提取**：使用 Apache Tika 提取文档文本
 3. **文档分块**：将文本分割成多个小块
 4. **向量生成**：调用火山引擎 API 生成文本嵌入向量
-5. **向量存储**：将文档块和向量存储在内存中
-6. **相似度检索**：根据用户问题检索相关文档块
+5. **向量存储**：将文档块和向量存储在 Milvus 向量数据库（单集合架构，通过 document_id 字段实现文档隔离）
+6. **相似度检索**：根据用户问题检索相关文档块（支持文档级隔离）
 7. **答案生成**：基于检索到的上下文生成答案
+
+**核心特性**：
+- **文档隔离**：支持多文档管理，每个文档独立存储和检索
+- **Web前端界面**：提供完整的Web界面，支持文档上传、管理、问答
+- **单集合架构**：使用单个 Milvus 集合，通过 document_id 字段实现逻辑隔离
+- **Redis缓存**：嵌入向量缓存，减少API调用，提升性能
 
 ## 技术栈
 
@@ -50,7 +56,9 @@ RAG/
 │       └── VectorStoreService.java      # 向量存储服务（Milvus集成）
 ├── src/main/resources/
 │   ├── application.yml                 # 主配置文件
-│   └── application.properties          # 应用属性
+│   ├── application.properties          # 应用属性
+│   └── static/
+│       └── index.html                   # Web前端界面
 └── pom.xml                              # Maven 依赖配置
 ```
 
@@ -90,8 +98,8 @@ spring:
   # 文件上传配置
   servlet:
     multipart:
-      max-file-size: 10MB  # 最大文件上传大小
-      max-request-size: 10MB
+      max-file-size: 100MB  # 最大文件上传大小
+      max-request-size: 100MB
   # Redis 配置
   data:
     redis:
@@ -217,30 +225,44 @@ server:
 
 ### 6. RagController.java
 
-**作用**: REST API 控制器，提供文档上传、问答、向量库管理等接口。
+**作用**: REST API 控制器，提供文档上传、问答、向量库管理、文档管理等接口。
 
 **主要类和方法**:
 - `RagController`: 控制器类
   - `uploadDocument(MultipartFile file)`: 上传文档并生成嵌入向量
     - 输入: MultipartFile 文件
-    - 输出: 包含成功状态、消息、块数量的 Map
-    - 流程: 提取文本 → 动态分块 → 生成向量（带缓存）→ 存储到 Milvus
-  - `chat(String message)`: 基于检索增强生成回答用户问题
-    - 输入: 用户问题 message
+    - 输出: 包含成功状态、消息、块数量、documentId 的 Map
+    - 流程: 提取文本 → 动态分块 → 生成向量（带缓存）→ 存储到 Milvus（记录 document_id）
+  - `chat(String message, String documentId)`: 基于检索增强生成回答用户问题
+    - 输入: 用户问题 message、文档ID（可选）
     - 输出: 包含成功状态和答案的 Map
-    - 流程: 生成问题向量（带缓存）→ Milvus 相似度搜索 → 格式化上下文 → 生成答案
+    - 流程: 生成问题向量（带缓存）→ Milvus 相似度搜索（支持文档隔离）→ 格式化上下文 → 生成答案
   - `clearVectorStore()`: 清空向量存储
     - 输出: 包含成功状态的 Map
     - 操作: 删除 Milvus 集合
   - `getStatus()`: 获取向量库状态
-    - 输出: 包含总块数量的 Map
+    - 输出: 包含总块数量、文档列表的 Map
     - 操作: 查询 Milvus 集合统计信息
+  - `getDocumentStatus(String documentId)`: 获取指定文档的状态
+    - 输入: 文档ID
+    - 输出: 包含文档块数量的 Map
+    - 操作: 查询特定 document_id 的数据统计
+  - `deleteDocument(String documentId)`: 删除指定文档
+    - 输入: 文档ID
+    - 输出: 包含成功状态的 Map
+    - 操作: 使用 filter 删除特定 document_id 的数据
+  - `getAllDocuments()`: 获取所有文档列表
+    - 输出: 包含文档ID列表、文件名映射的 Map
+    - 操作: 查询所有唯一的 document_id 和对应的文件名
 
 **API 端点**:
 - `POST /api/rag/upload`: 上传文档
-- `GET /api/rag/chat?message=xxx`: 问答
+- `GET /api/rag/chat?message=xxx&documentId=xxx`: 问答（支持文档隔离）
 - `POST /api/rag/clear`: 清空向量库
 - `GET /api/rag/status`: 获取状态
+- `GET /api/rag/document/{documentId}/status`: 获取文档状态
+- `DELETE /api/rag/document/{documentId}`: 删除文档
+- `GET /api/rag/documents`: 获取所有文档列表
 
 ---
 
@@ -250,6 +272,7 @@ server:
 
 **字段**:
 - `id`: 文档块唯一 ID（UUID）
+- `documentId`: 文档唯一 ID（用于文档隔离）
 - `content`: 文档块内容
 - `embedding`: 嵌入向量（List<Float>）
 - `source`: 文档来源（文件名）
@@ -284,7 +307,7 @@ server:
   - `createDocumentChunks(String text, String source, List<List<Float>> embeddings)`: 创建文档块对象列表
     - 输入: 文本内容、来源、嵌入向量列表
     - 输出: DocumentChunk 对象列表
-    - 实现: 为每个文本块生成唯一 ID 并创建 DocumentChunk 对象
+    - 实现: 为每个文本块生成唯一 ID 和 documentId 并创建 DocumentChunk 对象
 
 **核心方法详解**:
 - `splitLongParagraph(String paragraph)`: 分割过长的段落
@@ -356,10 +379,10 @@ server:
 
 **主要类和方法**:
 - `RagService`: RAG 服务类
-  - `chat(String query)`: 基于检索增强生成回答用户问题
-    - 输入: 用户问题
+  - `chat(String query, String documentId)`: 基于检索增强生成回答用户问题
+    - 输入: 用户问题、文档ID（可选，用于文档隔离）
     - 输出: 生成的答案
-    - 流程: 检索相关文档块（Milvus） → 格式化上下文 → 构建提示词 → 调用聊天 API
+    - 流程: 检索相关文档块（Milvus，支持文档隔离） → 格式化上下文 → 构建提示词 → 调用聊天 API
 
 **提示词模板**:
 ```
@@ -387,10 +410,10 @@ server:
 
 **主要类和方法**:
 - `RetrievalService`: 检索服务类
-  - `retrieve(String query, int topK)`: 根据查询检索相关文档块
-    - 输入: 用户查询、返回数量
+  - `retrieve(String query, int topK, String documentId)`: 根据查询检索相关文档块
+    - 输入: 用户查询、返回数量、文档ID（可选，用于文档隔离）
     - 输出: 相关文档块列表
-    - 流程: 生成查询向量（带缓存）→ Milvus 相似度搜索
+    - 流程: 生成查询向量（带缓存）→ Milvus 相似度搜索（支持文档隔离）
   - `formatContext(List<DocumentChunk> chunks)`: 格式化检索到的文档块为上下文字符串
     - 输入: 文档块列表
     - 输出: 格式化的上下文字符串
@@ -404,46 +427,58 @@ server:
 
 ### 12. VectorStoreService.java
 
-**作用**: 向量存储服务，使用 Milvus 向量数据库存储文档块及其嵌入向量，提供高性能相似度搜索功能。
+**作用**: 向量存储服务，使用 Milvus 向量数据库存储文档块及其嵌入向量，提供高性能相似度搜索功能（单集合架构，支持文档隔离）。
 
 **主要类和方法**:
 - `VectorStoreService`: 向量存储服务类
-  - `initCollection()`: 初始化 Milvus 集合
+  - `initCollection()`: 初始化 Milvus 集合（单集合架构）
     - 自动检查集合是否存在，不存在则创建
-    - 定义字段：id（主键）、vector（向量）、content、source、chunk_index
+    - 定义字段：id（主键）、document_id（文档隔离）、vector（向量）、content、source、chunk_index
     - 创建向量索引（IVF_FLAT，余弦相似度）
     - 加载集合到内存
   - `addChunks(List<DocumentChunk> documentChunks)`: 添加文档块到向量存储
     - 输入: 文档块列表
-    - 实现: 使用 Gson JsonObject 批量插入到 Milvus
+    - 实现: 使用 Gson JsonObject 批量插入到 Milvus，记录 document_id
     - 自动刷新数据确保持久化
-  - `similaritySearch(List<Float> queryEmbedding, int topK)`: 基于余弦相似度搜索相关文档块
-    - 输入: 查询嵌入向量、返回数量
+  - `similaritySearch(List<Float> queryEmbedding, int topK, String documentId)`: 基于余弦相似度搜索相关文档块
+    - 输入: 查询嵌入向量、返回数量、文档ID（可选，用于文档隔离）
     - 输出: 按相似度排序的文档块列表
-    - 实现: 使用 Milvus 向量搜索 API，返回包含相似度分数的结果
-  - `clear()`: 清空向量存储
-    - 操作: 删除整个 Milvus 集合
-  - `size()`: 获取存储的文档块数量
+    - 实现: 使用 Milvus 向量搜索 API，支持 document_id 过滤
+  - `deleteDocument(String documentId)`: 删除指定文档的所有块
+    - 输入: 文档ID
+    - 实现: 使用 filter 表达式删除特定 document_id 的数据
+  - `size()`: 获取存储的文档块总数
     - 操作: 查询 Milvus 集合统计信息
+  - `size(String documentId)`: 获取指定文档的块数量
+    - 输入: 文档ID
+    - 实现: 使用 filter 查询特定 document_id 的数据并统计
+  - `getAllDocumentIds()`: 获取所有文档ID列表
+    - 输出: 文档ID列表
+    - 实现: 查询集合中所有唯一的 document_id
+  - `getDocumentIdToFilenameMap()`: 获取文档ID到文件名的映射
+    - 输出: Map<documentId, filename>
+    - 实现: 查询集合中 document_id 和 source 字段
+  - `clearAll()`: 清空向量存储
+    - 操作: 删除整个 Milvus 集合
 
-**Milvus 集合设计**:
+**Milvus 集合设计（单集合架构）**:
 - **字段定义**:
   - `id`: VarChar(256)，主键，文档块唯一标识
+  - `document_id`: VarChar(128)，文档ID（用于文档隔离）
   - `vector`: FloatVector(2048)，嵌入向量
   - `content`: VarChar(65535)，文档块内容
-  - `source`: VarChar(512)，文档来源
+  - `source`: VarChar(512)，文档来源（文件名）
   - `chunk_index`: Int64，文档块索引
 - **索引配置**:
   - 索引类型: IVF_FLAT
   - 距离度量: COSINE（余弦相似度）
   - 参数: nlist=128
 
-**Milvus 优势**:
-- **高性能**: 专业的向量索引和搜索算法
-- **可扩展**: 支持海量向量数据存储
-- **持久化**: 数据持久存储，重启不丢失
-- **并发安全**: 支持高并发读写操作
-- **灵活查询**: 支持向量搜索和标量过滤
+**单集合架构优势**:
+- **简化管理**: 只需维护一个集合，降低运维复杂度
+- **高效隔离**: 通过 document_id 字段实现逻辑隔离
+- **灵活查询**: 支持跨文档检索和单文档检索
+- **易于扩展**: 适合中小规模应用，支持多文档管理
 
 **依赖**:
 - `MilvusClientV2`: Milvus 客户端
@@ -466,17 +501,17 @@ DocumentService.splitText() → 动态分块（智能段落分割）
     ↓
 EmbeddingService.generateEmbeddings() → 生成向量（Redis 缓存）
     ↓
-DocumentService.createDocumentChunks() → 创建文档块对象
+DocumentService.createDocumentChunks() → 创建文档块对象（生成 documentId）
     ↓
-VectorStoreService.addChunks() → 存储到 Milvus 向量数据库
+VectorStoreService.addChunks() → 存储到 Milvus 向量数据库（记录 document_id）
     ↓
-返回上传结果
+返回上传结果（包含 documentId）
 ```
 
 ### 2. 问答流程
 
 ```
-用户提问
+用户提问（可选择文档范围）
     ↓
 RagController.chat()
     ↓
@@ -486,7 +521,7 @@ RetrievalService.retrieve()
     ↓
 EmbeddingService.generateEmbedding() → 生成问题向量（Redis 缓存）
     ↓
-VectorStoreService.similaritySearch() → Milvus 向量相似度搜索
+VectorStoreService.similaritySearch() → Milvus 向量相似度搜索（支持 document_id 过滤）
     ↓
 RetrievalService.formatContext() → 格式化上下文
     ↓
@@ -500,10 +535,10 @@ RetrievalService.formatContext() → 格式化上下文
 ### 3. 数据流向
 
 **上传阶段**:
-- PDF 文件 → 文本 → 智能文本块 → 嵌入向量（缓存） → DocumentChunk 对象 → Milvus 持久化存储
+- PDF 文件 → 文本 → 智能文本块 → 嵌入向量（缓存） → DocumentChunk 对象（含 documentId） → Milvus 持久化存储（单集合）
 
 **问答阶段**:
-- 用户问题 → 问题向量（缓存） → Milvus 高性能相似度搜索 → 相关文档块 → 上下文 → 提示词 → 答案
+- 用户问题（可选文档范围）→ 问题向量（缓存） → Milvus 高性能相似度搜索（支持 document_id 过滤）→ 相关文档块 → 上下文 → 提示词 → 答案
 
 ### 4. 新特性数据流
 
@@ -600,9 +635,14 @@ curl -X POST http://localhost:8081/api/rag/upload \
   -F "file=@your_document.pdf"
 ```
 
-**问答**:
+**问答（所有文档）**:
 ```bash
 curl "http://localhost:8081/api/rag/chat?message=你的问题"
+```
+
+**问答（指定文档）**:
+```bash
+curl "http://localhost:8081/api/rag/chat?message=你的问题&documentId=xxx"
 ```
 
 **清空向量库**:
@@ -615,30 +655,59 @@ curl -X POST http://localhost:8081/api/rag/clear
 curl http://localhost:8081/api/rag/status
 ```
 
+**获取所有文档列表**:
+```bash
+curl http://localhost:8081/api/rag/documents
+```
+
+**获取文档状态**:
+```bash
+curl http://localhost:8081/api/rag/document/{documentId}/status
+```
+
+**删除文档**:
+```bash
+curl -X DELETE http://localhost:8081/api/rag/document/{documentId}
+```
+
 ## 注意事项
 
 1. **API Key 安全**: 不要将 API Key 提交到版本控制系统，建议使用环境变量
 2. **依赖服务**: 确保 Redis 和 Milvus 服务正常运行，应用启动时会自动连接
-3. **文件大小限制**: 默认最大上传 10MB，可在 `application.yml` 中调整
+3. **文件大小限制**: 默认最大上传 100MB，可在 `application.yml` 中调整
 4. **向量维度**: 确保嵌入模型和 Milvus 配置的向量维度一致（默认 2048）
 5. **缓存配置**: Redis 缓存是可选的，如果未启用 Redis，系统仍可正常运行但性能较低
 6. **数据持久化**: 使用 Milvus 后数据持久存储，重启应用不会丢失向量数据
+7. **文档隔离**: 系统使用单集合架构，通过 document_id 字段实现逻辑隔离，支持多文档管理
 
 ## 新特性说明
 
-### 1. 动态分块策略
+### 1. 文档隔离功能
+- **单集合架构**: 使用单个 Milvus 集合，通过 document_id 字段实现逻辑隔离
+- **多文档管理**: 支持上传多个文档，每个文档独立管理
+- **文档级检索**: 可选择在特定文档或所有文档范围内进行问答
+- **文档管理**: 支持查看文档列表、删除指定文档、查看文档统计
+
+### 2. Web 前端界面
+- **完整界面**: 提供现代化的 Web 前端界面
+- **文档上传**: 支持拖拽上传和文件选择
+- **文档管理**: 显示文档列表、文件名、块数量统计
+- **智能问答**: 支持选择文档范围进行问答
+- **实时反馈**: 显示操作状态和错误信息
+
+### 3. 动态分块策略
 - **智能分割**: 优先在段落和句子边界分割，保持语义完整性
 - **自适应大小**: 根据内容动态调整块大小（200-800 字符）
 - **上下文重叠**: 通过重叠保持块之间的语义关联
 - **质量提升**: 更好的分块策略显著提升向量检索准确性
 
-### 2. Redis 缓存优化
+### 4. Redis 缓存优化
 - **性能提升**: 缓存嵌入向量，避免重复调用火山引擎 API
 - **智能缓存**: 使用 MD5 哈希生成唯一缓存键
 - **可配置**: 支持开关缓存和设置过期时间
 - **降级方案**: Redis 不可用时自动降级到直接 API 调用
 
-### 3. Milvus 向量数据库
+### 5. Milvus 向量数据库
 - **高性能**: 专业的向量索引和搜索算法，支持大规模数据
 - **持久化**: 数据持久存储，重启应用不丢失
 - **可扩展**: 支持海量向量数据存储和检索
@@ -646,14 +715,14 @@ curl http://localhost:8081/api/rag/status
 
 ## 扩展建议
 
-1. **前端界面**: 开发 Web 前端或移动应用
-2. **多文档支持**: 支持批量上传和文档管理
-3. **用户认证**: 添加用户认证和权限管理
-4. **日志监控**: 集成日志系统和监控工具
-5. **性能优化**: 添加异步处理、连接池等优化
-6. **多模态支持**: 支持图片、音频等多模态文档处理
-7. **分布式部署**: 支持多节点部署和负载均衡
-8. **向量数据库集群**: Milvus 集群部署，支持更大规模数据
+1. **用户认证**: 添加用户认证和权限管理
+2. **批量上传**: 支持批量上传多个文档
+3. **日志监控**: 集成日志系统和监控工具
+4. **性能优化**: 添加异步处理、连接池等优化
+5. **多模态支持**: 支持图片、音频等多模态文档处理
+6. **分布式部署**: 支持多节点部署和负载均衡
+7. **向量数据库集群**: Milvus 集群部署，支持更大规模数据
+8. **文档导出**: 支持导出问答结果和文档统计
 
 ## 许可证
 

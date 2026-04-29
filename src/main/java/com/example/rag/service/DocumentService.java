@@ -217,17 +217,33 @@ public class DocumentService {
      * @return 文档块对象列表，每个对象包含块ID、内容、嵌入向量、来源和位置信息
      */
     public List<DocumentChunk> createDocumentChunks(String text, String source, List<List<Float>> embeddings) {
+        String documentId = UUID.randomUUID().toString(); // 生成文档唯一ID
+        return createDocumentChunks(text, source, embeddings, documentId);
+    }
+
+    /**
+     * 创建文档块对象列表（支持指定文档ID）
+     * 将文本分割成多个块，并为每个块创建包含唯一ID、嵌入向量、来源等信息的DocumentChunk对象
+     *
+     * @param text 要分割的文本内容
+     * @param source 文档来源标识（如文件名或URL）
+     * @param embeddings 与文本块对应的嵌入向量列表，需与分割后的文本块数量一致
+     * @param documentId 文档唯一ID
+     * @return 文档块对象列表，每个对象包含块ID、内容、嵌入向量、来源、位置信息和文档ID
+     */
+    public List<DocumentChunk> createDocumentChunks(String text, String source, List<List<Float>> embeddings, String documentId) {
         List<String> chunks = splitText(text);
         List<DocumentChunk> documentChunks = new ArrayList<>();
         
         /*
          * 遍历所有文本块，为每个块生成唯一ID并创建DocumentChunk对象
-         * 每个DocumentChunk包含：唯一标识、文本内容、嵌入向量、来源、索引位置和总块数
+         * 每个DocumentChunk包含：唯一标识、文档ID、文本内容、嵌入向量、来源、索引位置和总块数
          */
         for (int i = 0; i < chunks.size(); i++) {
             String chunkId = UUID.randomUUID().toString();
             DocumentChunk chunk = new DocumentChunk(
                 chunkId,
+                documentId,
                 chunks.get(i),
                 embeddings.get(i),
                 source,

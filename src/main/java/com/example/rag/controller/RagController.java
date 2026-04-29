@@ -60,9 +60,14 @@ public class RagController {
                 text, file.getOriginalFilename(), embeddings);
             vectorStoreService.addChunks(documentChunks);
 
+            // 获取文档ID
+            String documentId = documentChunks.isEmpty() ? null : documentChunks.get(0).getDocumentId();
+
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "文档上传成功");
+            response.put("documentId", documentId);
+            response.put("filename", file.getOriginalFilename());
             response.put("chunks", chunks.size());
             response.put("totalChunks", vectorStoreService.size());
 
@@ -79,16 +84,20 @@ public class RagController {
     /**
  * 基于检索增强生成回答用户问题
  * @param message 用户问题
+ * @param documentId 文档ID（可选，如果指定则只在该文档内搜索）
  * @return 生成的答案
  */
     @GetMapping("/chat")
-    public ResponseEntity<Map<String, Object>> chat(@RequestParam("message") String message) {
+    public ResponseEntity<Map<String, Object>> chat(
+            @RequestParam("message") String message,
+            @RequestParam(value = "documentId", required = false) String documentId) {
         try {
-            String response = ragService.chat(message);
+            String response = ragService.chat(message, documentId);
 
             Map<String, Object> result = new HashMap<>();
             result.put("success", true);
             result.put("response", response);
+            result.put("documentId", documentId);
 
             return ResponseEntity.ok(result);
         } catch (Exception e) {
@@ -105,7 +114,7 @@ public class RagController {
  */
     @PostMapping("/clear")
     public ResponseEntity<Map<String, Object>> clearVectorStore() {
-        vectorStoreService.clear();
+        vectorStoreService.clearAll();
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
@@ -122,8 +131,73 @@ public class RagController {
     public ResponseEntity<Map<String, Object>> getStatus() {
         Map<String, Object> status = new HashMap<>();
         status.put("totalChunks", vectorStoreService.size());
+        status.put("documents", vectorStoreService.getAllDocumentIds());
         status.put("success", true);
 
         return ResponseEntity.ok(status);
+    }
+
+    /**
+ * 获取指定文档的状态
+ * @param documentId 文档ID
+ * @return 文档状态信息
+ */
+    @GetMapping("/document/{documentId}/status")
+    public ResponseEntity<Map<String, Object>> getDocumentStatus(@PathVariable String documentId) {
+        Map<String, Object> status = new HashMap<>();
+        status.put("documentId", documentId);
+        status.put("chunks", vectorStoreService.size(documentId));
+        status.put("success", true);
+
+        return ResponseEntity.ok(status);
+    }
+
+    /**
+ * 删除指定文档
+ * @param documentId 文档ID
+ * @return 删除结果
+ */
+    @DeleteMapping("/document/{documentId}")
+    public ResponseEntity<Map<String, Object>> deleteDocument(@PathVariable String documentId) {
+        try {
+            vectorStoreService.deleteDocument(documentId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "文档删除成功");
+            response.put("documentId", documentId);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "文档删除失败: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    /**
+ * 获取所有文档列表
+ * @return 文档列表
+ */
+    @GetMapping("/documents")
+    public ResponseEntity<Map<String, Object>> getAllDocuments() {
+        try {
+            List<String> documentIds = vectorStoreService.getAllDocumentIds();
+            Map<String, String> filenameMap = vectorStoreService.getDocumentIdToFilenameMap();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("documents", documentIds);
+            response.put("filenameMap", filenameMap);
+            response.put("count", documentIds.size());
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "获取文档列表失败: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
     }
 }
