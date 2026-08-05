@@ -99,6 +99,28 @@ retry:
   max-delay: 10000  # 最大延迟（毫秒）
   multiplier: 2.0  # 延迟倍数（指数退避）
 
+# Prometheus指标配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,metrics
+  metrics:
+    tags:
+      application: rag-system
+    distribution:
+      percentiles-histogram:
+        "[rag.retrieval.duration]": true   # 启用直方图
+        "[rag.milvus.query.duration]": true
+
+# 日志配置
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    com.example.rag: INFO
+    io.milvus: WARN
+
 # 服务器端口配置
 server:
   port: 8081

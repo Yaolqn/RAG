@@ -29,6 +29,9 @@ public class RagService {
     @Autowired
     private RetryUtil retryUtil;  // 重试工具
 
+    @Autowired
+    private MetricsService metricsService;  // 指标服务
+
     @Value("${volcengine.chat.model}")
     private String chatModel;  // 聊天模型 ID
     
@@ -51,47 +54,58 @@ public class RagService {
  * @return 生成的答案
  */
     public String chat(String query, String documentId) {
-        // 检索相关文档块
-        List<DocumentChunk> relevantChunks = retrievalService.retrieve(query, defaultTopK, documentId);
-        // 格式化检索到的上下文
-        String context = retrievalService.formatContext(relevantChunks);
-
-        // 构建提示词模板
-        String promptTemplate = """
-            你是一个专业的知识库助手。请根据以下参考信息回答用户的问题。
-            
-            参考信息：
-            %s
-            
-            用户问题：
-            %s
-            
-            如果参考信息中没有相关内容，请明确告知用户，不要编造答案。
-            """.formatted(context, query);
-
-        // 构建聊天消息
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.builder()
-                .role(ChatMessageRole.USER)
-                .content(promptTemplate)
-                .build());
-
-        // 构建聊天完成请求
-        ChatCompletionRequest request = ChatCompletionRequest.builder()
-                .model(chatModel)
-                .messages(messages)
-                .build();
-
-        // 调用火山引擎聊天 API 生成答案（带重试）
+        long startTime = System.currentTimeMillis();
+        boolean success = false;
+        
         try {
+            // 检索相关文档块
+            List<DocumentChunk> relevantChunks = retrievalService.retrieve(query, defaultTopK, documentId);
+            // 格式化检索到的上下文
+            String context = retrievalService.formatContext(relevantChunks);
+
+            // 构建提示词模板
+            String promptTemplate = """
+                你是一个专业的知识库助手。请根据以下参考信息回答用户的问题。
+                
+                参考信息：
+                %s
+                
+                用户问题：
+                %s
+                
+                如果参考信息中没有相关内容，请明确告知用户，不要编造答案。
+                """.formatted(context, query);
+
+            // 构建聊天消息
+            List<ChatMessage> messages = new ArrayList<>();
+            messages.add(ChatMessage.builder()
+                    .role(ChatMessageRole.USER)
+                    .content(promptTemplate)
+                    .build());
+
+            // 构建聊天完成请求
+            ChatCompletionRequest request = ChatCompletionRequest.builder()
+                    .model(chatModel)
+                    .messages(messages)
+                    .build();
+
+            // 调用火山引擎聊天 API 生成答案（带重试）
             var response = retryUtil.executeWithRetry(
                     () -> arkService.createChatCompletion(request),
                     "聊天API调用"
             );
             Object content = response.getChoices().get(0).getMessage().getContent();
+            success = true;
+            
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordRagRequest(duration, true);
+            System.out.println("RAG问答总耗时: " + duration + "ms");
+            
             return content != null ? content.toString() : "";
         } catch (Exception e) {
-            System.err.println("聊天API调用失败: " + e.getMessage());
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordRagRequest(duration, false);
+            System.err.println("RAG问答失败: " + e.getMessage());
             e.printStackTrace();
             return "抱歉，" + retryUtil.getFriendlyErrorMessage(e);
         }

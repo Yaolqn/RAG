@@ -23,6 +23,9 @@ public class RetrievalService {
     
     @Autowired
     private RerankService rerankService;  // 重排序服务
+
+    @Autowired
+    private MetricsService metricsService;  // 指标服务
     
     @Value("${retrieval.top-k:3}")
     private int defaultTopK;  // 默认检索返回的最相关文档块数量
@@ -63,6 +66,8 @@ public class RetrievalService {
  * @return 相关文档块列表
  */
     public List<DocumentChunk> retrieve(String query, int topK, String documentId) {
+        long startTime = System.currentTimeMillis();
+        
         // 生成查询的嵌入向量
         List<Float> queryEmbedding = embeddingService.generateEmbedding(query);
         
@@ -75,13 +80,25 @@ public class RetrievalService {
         // 如果启用重排序，对候选块进行重排序
         if (rerankEnabled && candidates.size() > topK) {
             System.out.println("启用重排序，候选块数量: " + candidates.size() + ", 最终返回: " + topK);
-            return rerankService.rerank(query, candidates, topK);
+            long rerankStartTime = System.currentTimeMillis();
+            List<DocumentChunk> rerankedResults = rerankService.rerank(query, candidates, topK);
+            long rerankDuration = System.currentTimeMillis() - rerankStartTime;
+            metricsService.recordRerank(rerankDuration);
+            
+            long totalDuration = System.currentTimeMillis() - startTime;
+            System.out.println("检索总耗时: " + totalDuration + "ms (含重排序: " + rerankDuration + "ms)");
+            return rerankedResults;
         }
         
         // 否则直接返回前topK个结果
-        return candidates.stream()
+        List<DocumentChunk> results = candidates.stream()
                 .limit(topK)
                 .collect(Collectors.toList());
+        
+        long totalDuration = System.currentTimeMillis() - startTime;
+        System.out.println("检索总耗时: " + totalDuration + "ms");
+        
+        return results;
     }
 
     /**

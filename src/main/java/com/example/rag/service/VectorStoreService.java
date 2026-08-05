@@ -38,6 +38,9 @@ public class VectorStoreService {
     @Autowired
     private MilvusClientV2 milvusClient;
 
+    @Autowired
+    private MetricsService metricsService;
+
     @Value("${milvus.collection-name:rag_documents}")
     private String collectionName;
 
@@ -178,6 +181,9 @@ public class VectorStoreService {
      * @param documentId 可选。如果传入，则只在该文档范围内检索；如果为null，则进行全局知识检索
      */
     public List<DocumentChunk> similaritySearch(List<Float> queryEmbedding, int topK, String documentId) {
+        long startTime = System.currentTimeMillis();
+        boolean searchSuccess = false;
+        
         try {
             FloatVec floatVec = new FloatVec(queryEmbedding);
 
@@ -196,6 +202,7 @@ public class VectorStoreService {
             }
 
             SearchResp searchResp = milvusClient.search(searchBuilder.build());
+            searchSuccess = true;
             List<DocumentChunk> results = new ArrayList<>();
 
             if (searchResp.getSearchResults() != null && !searchResp.getSearchResults().isEmpty()) {
@@ -213,9 +220,15 @@ public class VectorStoreService {
                     results.add(chunk);
                 }
             }
+            
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordMilvusSearch(duration, true);
+            System.out.println("Milvus搜索耗时: " + duration + "ms");
             return results;
 
         } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordMilvusSearch(duration, false);
             System.err.println("检索失败: " + e.getMessage());
             return new ArrayList<>();
         }

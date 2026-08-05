@@ -11,9 +11,7 @@ import org.springframework.stereotype.Component;
 public class RagApplication {
 
     public static void main(String[] args) {
-        SpringApplication app = new SpringApplication(RagApplication.class);
-        app.addListeners(new StartupListener());
-        app.run(args);
+        SpringApplication.run(RagApplication.class, args);
     }
 
     @Component
@@ -30,6 +28,7 @@ public class RagApplication {
             System.out.println("📱 前端访问地址: http://localhost:" + port + contextPath + "/");
             System.out.println("📄 上传API: POST http://localhost:" + port + contextPath + "/api/rag/upload");
             System.out.println("💬 问答API: GET http://localhost:" + port + contextPath + "/api/rag/chat?message=xxx");
+            System.out.println("📊 Prometheus指标: http://localhost:" + port + contextPath + "/actuator/prometheus");
             System.out.println("🗑️ 向量数据库地址: http://localhost:8000");
             System.out.println("=".repeat(60) + "\n");
         }

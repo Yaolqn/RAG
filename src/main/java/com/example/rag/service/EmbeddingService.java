@@ -32,6 +32,9 @@ public class EmbeddingService {
     @Autowired
     private RetryUtil retryUtil;  // 重试工具
 
+    @Autowired
+    private MetricsService metricsService;  // 指标服务
+
     @Value("${volcengine.embedding.model}")
     private String model;  // 嵌入模型 ID
 
@@ -47,14 +50,19 @@ public class EmbeddingService {
  * @return 嵌入向量（Float 列表）
  */
     public List<Float> generateEmbedding(String text) {
+        long startTime = System.currentTimeMillis();
+        
         // 尝试从缓存获取
         if (cacheEnabled && redisTemplate != null) {
             String cacheKey = generateCacheKey(text);
             List<Float> cachedEmbedding = (List<Float>) redisTemplate.opsForValue().get(cacheKey);
             
             if (cachedEmbedding != null) {
+                metricsService.recordEmbeddingCacheHit();
                 System.out.println("从缓存获取嵌入向量，文本长度: " + text.length());
                 return cachedEmbedding;
+            } else {
+                metricsService.recordEmbeddingCacheMiss();
             }
         }
         
@@ -77,16 +85,23 @@ public class EmbeddingService {
         // 调用火山引擎 API 生成嵌入向量（带重试）
         System.out.println("发送请求到火山引擎 API...");
         MultimodalEmbeddingResult result;
+        long apiStartTime = System.currentTimeMillis();
+        boolean apiSuccess = false;
         try {
             result = retryUtil.executeWithRetry(
                     () -> arkService.createMultiModalEmbeddings(request),
                     "嵌入向量生成"
             );
+            apiSuccess = true;
         } catch (Exception e) {
+            long apiDuration = System.currentTimeMillis() - apiStartTime;
+            metricsService.recordEmbeddingApiCall(apiDuration, false);
             System.err.println("嵌入向量生成失败: " + e.getMessage());
             e.printStackTrace();
             throw new RuntimeException(retryUtil.getFriendlyErrorMessage(e), e);
         }
+        long apiDuration = System.currentTimeMillis() - apiStartTime;
+        metricsService.recordEmbeddingApiCall(apiDuration, true);
         System.out.println("API 返回结果: " + result);
         
         // 根据火山引擎 SDK 的实际 API 结构提取嵌入向量
@@ -98,6 +113,9 @@ public class EmbeddingService {
             redisTemplate.opsForValue().set(cacheKey, embedding, cacheTtl, TimeUnit.SECONDS);
             System.out.println("嵌入向量已缓存，TTL: " + cacheTtl + " 秒");
         }
+        
+        long totalDuration = System.currentTimeMillis() - startTime;
+        System.out.println("嵌入向量生成总耗时: " + totalDuration + "ms");
         
         return embedding;
     }
