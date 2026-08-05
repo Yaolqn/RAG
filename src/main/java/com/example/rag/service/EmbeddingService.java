@@ -1,5 +1,6 @@
 package com.example.rag.service;
 
+import com.example.rag.util.RetryUtil;
 import com.volcengine.ark.runtime.model.multimodalembeddings.MultimodalEmbeddingInput;
 import com.volcengine.ark.runtime.model.multimodalembeddings.MultimodalEmbeddingRequest;
 import com.volcengine.ark.runtime.model.multimodalembeddings.MultimodalEmbeddingResult;
@@ -27,6 +28,9 @@ public class EmbeddingService {
 
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;  // Redis 模板（可选）
+
+    @Autowired
+    private RetryUtil retryUtil;  // 重试工具
 
     @Value("${volcengine.embedding.model}")
     private String model;  // 嵌入模型 ID
@@ -70,9 +74,19 @@ public class EmbeddingService {
                 .input(inputs)
                 .build();
 
-        // 调用火山引擎 API 生成嵌入向量
+        // 调用火山引擎 API 生成嵌入向量（带重试）
         System.out.println("发送请求到火山引擎 API...");
-        MultimodalEmbeddingResult result = arkService.createMultiModalEmbeddings(request);
+        MultimodalEmbeddingResult result;
+        try {
+            result = retryUtil.executeWithRetry(
+                    () -> arkService.createMultiModalEmbeddings(request),
+                    "嵌入向量生成"
+            );
+        } catch (Exception e) {
+            System.err.println("嵌入向量生成失败: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException(retryUtil.getFriendlyErrorMessage(e), e);
+        }
         System.out.println("API 返回结果: " + result);
         
         // 根据火山引擎 SDK 的实际 API 结构提取嵌入向量
@@ -142,7 +156,9 @@ public class EmbeddingService {
             System.out.println("API 返回结果为 null");
         }
         
-        throw new RuntimeException("Failed to generate embedding - 请查看控制台日志了解详细错误信息");
+        throw new RuntimeException(retryUtil.getFriendlyErrorMessage(
+                new RuntimeException("Failed to generate embedding - 请查看控制台日志了解详细错误信息")
+        ));
     }
     
     /**

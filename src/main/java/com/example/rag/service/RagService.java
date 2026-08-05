@@ -1,6 +1,7 @@
 package com.example.rag.service;
 
 import com.example.rag.model.DocumentChunk;
+import com.example.rag.util.RetryUtil;
 import com.volcengine.ark.runtime.model.completion.chat.ChatCompletionRequest;
 import com.volcengine.ark.runtime.model.completion.chat.ChatMessage;
 import com.volcengine.ark.runtime.model.completion.chat.ChatMessageRole;
@@ -24,6 +25,9 @@ public class RagService {
 
     @Autowired
     private ArkService arkService;  // 火山引擎 Ark 服务
+
+    @Autowired
+    private RetryUtil retryUtil;  // 重试工具
 
     @Value("${volcengine.chat.model}")
     private String chatModel;  // 聊天模型 ID
@@ -78,14 +82,18 @@ public class RagService {
                 .messages(messages)
                 .build();
 
-        // 调用火山引擎聊天 API 生成答案
+        // 调用火山引擎聊天 API 生成答案（带重试）
         try {
-            Object content = arkService.createChatCompletion(request).getChoices().get(0).getMessage().getContent();
+            var response = retryUtil.executeWithRetry(
+                    () -> arkService.createChatCompletion(request),
+                    "聊天API调用"
+            );
+            Object content = response.getChoices().get(0).getMessage().getContent();
             return content != null ? content.toString() : "";
         } catch (Exception e) {
             System.err.println("聊天API调用失败: " + e.getMessage());
             e.printStackTrace();
-            return "抱歉，生成答案时出错: " + e.getMessage();
+            return "抱歉，" + retryUtil.getFriendlyErrorMessage(e);
         }
     }
 }

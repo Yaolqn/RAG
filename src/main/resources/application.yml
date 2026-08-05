@@ -91,6 +91,14 @@ retrieval:
     final-top-k: 3  # 重排序后返回的最终块数量
     method: keyword  # 重排序方法：keyword（关键词匹配）、semantic（语义相似度）
 
+# API重试配置
+retry:
+  enabled: true  # 是否启用重试
+  max-attempts: 3  # 最大重试次数
+  initial-delay: 1000  # 初始延迟（毫秒）
+  max-delay: 10000  # 最大延迟（毫秒）
+  multiplier: 2.0  # 延迟倍数（指数退避）
+
 # 服务器端口配置
 server:
   port: 8081
