@@ -44,13 +44,27 @@ public class VectorStoreService {
     @Value("${milvus.dimension:2048}")
     private int dimension;
 
-    // 字段定义
-    private static final String ID_FIELD = "id";
-    private static final String DOCUMENT_ID_FIELD = "document_id"; // 新增：用于隔离文档的字段
-    private static final String VECTOR_FIELD = "vector";
-    private static final String CONTENT_FIELD = "content";
-    private static final String SOURCE_FIELD = "source";
-    private static final String CHUNK_INDEX_FIELD = "chunk_index";
+    // 字段定义（从配置文件读取）
+    @Value("${vector-store.fields.id:id}")
+    private String idField;
+    
+    @Value("${vector-store.fields.document-id:document_id}")
+    private String documentIdField;
+    
+    @Value("${vector-store.fields.vector:vector}")
+    private String vectorField;
+    
+    @Value("${vector-store.fields.content:content}")
+    private String contentField;
+    
+    @Value("${vector-store.fields.source:source}")
+    private String sourceField;
+    
+    @Value("${vector-store.fields.chunk-index:chunk_index}")
+    private String chunkIndexField;
+    
+    @Value("${vector-store.index.nlist:128}")
+    private int indexNlist;
 
     /**
      * 初始化共享的 Milvus 集合
@@ -67,15 +81,15 @@ public class VectorStoreService {
             // 1. 定义 Schema
             CreateCollectionReq.CollectionSchema schema = CreateCollectionReq.CollectionSchema.builder().build();
 
-            schema.addField(AddFieldReq.builder().fieldName(ID_FIELD).dataType(DataType.VarChar).maxLength(256).isPrimaryKey(true).autoID(false).build());
+            schema.addField(AddFieldReq.builder().fieldName(idField).dataType(DataType.VarChar).maxLength(256).isPrimaryKey(true).autoID(false).build());
 
             // 【核心】加入 document_id 作为过滤字段
-            schema.addField(AddFieldReq.builder().fieldName(DOCUMENT_ID_FIELD).dataType(DataType.VarChar).maxLength(128).build());
+            schema.addField(AddFieldReq.builder().fieldName(documentIdField).dataType(DataType.VarChar).maxLength(128).build());
 
-            schema.addField(AddFieldReq.builder().fieldName(VECTOR_FIELD).dataType(DataType.FloatVector).dimension(dimension).build());
-            schema.addField(AddFieldReq.builder().fieldName(CONTENT_FIELD).dataType(DataType.VarChar).maxLength(65535).build());
-            schema.addField(AddFieldReq.builder().fieldName(SOURCE_FIELD).dataType(DataType.VarChar).maxLength(512).build());
-            schema.addField(AddFieldReq.builder().fieldName(CHUNK_INDEX_FIELD).dataType(DataType.Int64).build());
+            schema.addField(AddFieldReq.builder().fieldName(vectorField).dataType(DataType.FloatVector).dimension(dimension).build());
+            schema.addField(AddFieldReq.builder().fieldName(contentField).dataType(DataType.VarChar).maxLength(65535).build());
+            schema.addField(AddFieldReq.builder().fieldName(sourceField).dataType(DataType.VarChar).maxLength(512).build());
+            schema.addField(AddFieldReq.builder().fieldName(chunkIndexField).dataType(DataType.Int64).build());
 
             // 2. 创建集合
             CreateCollectionReq createReq = CreateCollectionReq.builder()
@@ -88,10 +102,10 @@ public class VectorStoreService {
             // 3. 创建向量索引 (由于数据量会累加，可以使用 IVF_FLAT 或 HNSW)
             IndexParam indexParam = IndexParam.builder()
                     .indexName("vector_index")
-                    .fieldName(VECTOR_FIELD)
+                    .fieldName(vectorField)
                     .indexType(IndexParam.IndexType.IVF_FLAT)
                     .metricType(IndexParam.MetricType.COSINE)
-                    .extraParams(Collections.singletonMap("nlist", 128))
+                    .extraParams(Collections.singletonMap("nlist", indexNlist))
                     .build();
 
             CreateIndexReq createIndexReq = CreateIndexReq.builder()
@@ -127,18 +141,18 @@ public class VectorStoreService {
             List<JsonObject> rows = new ArrayList<>();
             for (DocumentChunk chunk : documentChunks) {
                 JsonObject row = new JsonObject();
-                row.addProperty(ID_FIELD, chunk.getId());
+                row.addProperty(idField, chunk.getId());
 
                 // 【核心】记录所属的 documentId
-                row.addProperty(DOCUMENT_ID_FIELD, chunk.getDocumentId() != null ? chunk.getDocumentId() : "default");
+                row.addProperty(documentIdField, chunk.getDocumentId() != null ? chunk.getDocumentId() : "default");
 
                 JsonArray vectorArray = new JsonArray();
                 chunk.getEmbedding().forEach(vectorArray::add);
-                row.add(VECTOR_FIELD, vectorArray);
+                row.add(vectorField, vectorArray);
 
-                row.addProperty(CONTENT_FIELD, chunk.getContent());
-                row.addProperty(SOURCE_FIELD, chunk.getSource());
-                row.addProperty(CHUNK_INDEX_FIELD, chunk.getChunkIndex());
+                row.addProperty(contentField, chunk.getContent());
+                row.addProperty(sourceField, chunk.getSource());
+                row.addProperty(chunkIndexField, chunk.getChunkIndex());
                 rows.add(row);
             }
 
@@ -169,14 +183,13 @@ public class VectorStoreService {
 
             SearchReq.SearchReqBuilder searchBuilder = SearchReq.builder()
                     .collectionName(collectionName)
-                    .annsField(VECTOR_FIELD)
-                    .data(Collections.singletonList(floatVec))
+                    .annsField(vectorField)
                     .topK(topK)
-                    .outputFields(List.of(CONTENT_FIELD, SOURCE_FIELD, CHUNK_INDEX_FIELD, DOCUMENT_ID_FIELD));
+                    .outputFields(List.of(contentField, sourceField, chunkIndexField, documentIdField));
 
             // 【核心过滤】如果指定了 documentId，就增加标量过滤条件
             if (documentId != null && !documentId.trim().isEmpty()) {
-                String filterExpr = DOCUMENT_ID_FIELD + " == '" + documentId + "'";
+                String filterExpr = documentIdField + " == '" + documentId + "'";
                 searchBuilder.filter(filterExpr);
                 System.out.println("启用文档隔离检索，Filter: " + filterExpr);
             }
@@ -188,11 +201,11 @@ public class VectorStoreService {
                 for (SearchResp.SearchResult result : searchResp.getSearchResults().get(0)) {
                     DocumentChunk chunk = new DocumentChunk();
                     chunk.setId(String.valueOf(result.getId()));
-                    chunk.setDocumentId((String) result.getEntity().get(DOCUMENT_ID_FIELD));
-                    chunk.setContent((String) result.getEntity().get(CONTENT_FIELD));
-                    chunk.setSource((String) result.getEntity().get(SOURCE_FIELD));
+                    chunk.setDocumentId((String) result.getEntity().get(documentIdField));
+                    chunk.setContent((String) result.getEntity().get(contentField));
+                    chunk.setSource((String) result.getEntity().get(sourceField));
 
-                    Object indexObj = result.getEntity().get(CHUNK_INDEX_FIELD);
+                    Object indexObj = result.getEntity().get(chunkIndexField);
                     if (indexObj != null) chunk.setChunkIndex(((Number) indexObj).intValue());
 
                     chunk.setSimilarity(result.getScore());
@@ -215,7 +228,7 @@ public class VectorStoreService {
 
         try {
             // 【核心】使用 DeleteReq 和过滤表达式删除特定文档的数据，无需删除集合
-            String filterExpr = DOCUMENT_ID_FIELD + " == '" + documentId + "'";
+            String filterExpr = documentIdField + " == '" + documentId + "'";
             DeleteReq deleteReq = DeleteReq.builder()
                     .collectionName(collectionName)
                     .filter(filterExpr)
@@ -266,11 +279,11 @@ public class VectorStoreService {
             }
 
             // 使用查询获取该文档的所有数据，然后统计数量
-            String filterExpr = DOCUMENT_ID_FIELD + " == '" + documentId + "'";
+            String filterExpr = documentIdField + " == '" + documentId + "'";
             QueryReq queryReq = QueryReq.builder()
                     .collectionName(collectionName)
                     .filter(filterExpr)
-                    .outputFields(Collections.singletonList(ID_FIELD))
+                    .outputFields(Collections.singletonList(idField))
                     .limit(10000L)  // 设置较大的limit以获取所有数据
                     .build();
 
@@ -303,8 +316,8 @@ public class VectorStoreService {
             // 查出全量数据中的 document_id 字段
             QueryReq queryReq = QueryReq.builder()
                     .collectionName(collectionName)
-                    .filter(ID_FIELD + " != ''") // 匹配所有数据
-                    .outputFields(Collections.singletonList(DOCUMENT_ID_FIELD))
+                    .filter(idField + " != ''") // 匹配所有数据
+                    .outputFields(Collections.singletonList(documentIdField))
                     .limit(10000L) // 注意：如果你的 chunk 数量非常大，这里可能会受限制
                     .build();
 
@@ -313,7 +326,7 @@ public class VectorStoreService {
 
             if (resp.getQueryResults() != null) {
                 for (QueryResp.QueryResult result : resp.getQueryResults()) {
-                    String docId = (String) result.getEntity().get(DOCUMENT_ID_FIELD);
+                    String docId = (String) result.getEntity().get(documentIdField);
                     if (docId != null) uniqueDocIds.add(docId);
                 }
             }
@@ -342,16 +355,16 @@ public class VectorStoreService {
             // 查出全量数据中的 document_id 和 source 字段
             QueryReq queryReq = QueryReq.builder()
                     .collectionName(collectionName)
-                    .filter(ID_FIELD + " != ''")
-                    .outputFields(List.of(DOCUMENT_ID_FIELD, SOURCE_FIELD))
+                    .filter(idField + " != ''")
+                    .outputFields(List.of(documentIdField, sourceField))
                     .limit(10000L)
                     .build();
 
             QueryResp resp = milvusClient.query(queryReq);
             if (resp.getQueryResults() != null) {
                 for (QueryResp.QueryResult result : resp.getQueryResults()) {
-                    String docId = (String) result.getEntity().get(DOCUMENT_ID_FIELD);
-                    String source = (String) result.getEntity().get(SOURCE_FIELD);
+                    String docId = (String) result.getEntity().get(documentIdField);
+                    String source = (String) result.getEntity().get(sourceField);
                     if (docId != null && source != null && !resultMap.containsKey(docId)) {
                         resultMap.put(docId, source);
                     }

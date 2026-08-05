@@ -27,6 +27,9 @@ public class RagService {
 
     @Value("${volcengine.chat.model}")
     private String chatModel;  // 聊天模型 ID
+    
+    @Value("${retrieval.top-k:3}")
+    private int defaultTopK;  // 默认检索返回的最相关文档块数量
 
     /**
  * 基于检索增强生成回答用户问题
@@ -45,7 +48,7 @@ public class RagService {
  */
     public String chat(String query, String documentId) {
         // 检索相关文档块
-        List<DocumentChunk> relevantChunks = retrievalService.retrieve(query, 3, documentId);
+        List<DocumentChunk> relevantChunks = retrievalService.retrieve(query, defaultTopK, documentId);
         // 格式化检索到的上下文
         String context = retrievalService.formatContext(relevantChunks);
 

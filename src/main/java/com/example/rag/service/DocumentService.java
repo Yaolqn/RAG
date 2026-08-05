@@ -3,6 +3,7 @@ package com.example.rag.service;
 import com.example.rag.model.DocumentChunk;
 import org.apache.tika.Tika;
 import org.apache.tika.metadata.Metadata;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,10 +21,17 @@ public class DocumentService {
 
     private final Tika tika = new Tika();  // Apache Tika 文本提取工具
     
-    private static final int MIN_CHUNK_SIZE = 200;  // 最小块大小
-    private static final int MAX_CHUNK_SIZE = 800;  // 最大块大小
-    private static final int TARGET_CHUNK_SIZE = 500;  // 目标块大小
-    private static final int CHUNK_OVERLAP = 100;  // 块重叠大小（保持上下文连续性）
+    @Value("${document.chunk.min-size:200}")
+    private int minChunkSize;  // 最小块大小
+    
+    @Value("${document.chunk.max-size:800}")
+    private int maxChunkSize;  // 最大块大小
+    
+    @Value("${document.chunk.target-size:500}")
+    private int targetChunkSize;  // 目标块大小
+    
+    @Value("${document.chunk.overlap:100}")
+    private int chunkOverlap;  // 块重叠大小（保持上下文连续性）
 
     /**
  * 从上传的文件中提取文本
@@ -65,19 +73,19 @@ public class DocumentService {
             }
             
             // 如果段落本身在目标大小范围内，直接作为一个块
-            if (paragraph.length() >= MIN_CHUNK_SIZE && paragraph.length() <= MAX_CHUNK_SIZE) {
+            if (paragraph.length() >= minChunkSize && paragraph.length() <= maxChunkSize) {
                 chunks.add(paragraph.trim());
                 continue;
             }
             
             // 如果段落太长，按句子分割
-            if (paragraph.length() > MAX_CHUNK_SIZE) {
+            if (paragraph.length() > maxChunkSize) {
                 List<String> paragraphChunks = splitLongParagraph(paragraph);
                 chunks.addAll(paragraphChunks);
             }
             
             // 如果段落太短，尝试与下一段合并
-            if (paragraph.length() < MIN_CHUNK_SIZE) {
+            if (paragraph.length() < minChunkSize) {
                 // 暂时添加，后续会合并
                 chunks.add(paragraph.trim());
             }
@@ -111,7 +119,7 @@ public class DocumentService {
             }
             
             // 如果添加这句会超过最大限制，保存当前块
-            if (currentChunk.length() + trimmedSentence.length() > MAX_CHUNK_SIZE && currentChunk.length() >= MIN_CHUNK_SIZE) {
+            if (currentChunk.length() + trimmedSentence.length() > maxChunkSize && currentChunk.length() >= minChunkSize) {
                 chunks.add(currentChunk.toString().trim());
                 currentChunk = new StringBuilder(trimmedSentence);
             } else {
@@ -137,7 +145,7 @@ public class DocumentService {
         StringBuilder currentChunk = new StringBuilder();
         
         for (String chunk : chunks) {
-            if (currentChunk.length() + chunk.length() <= TARGET_CHUNK_SIZE) {
+            if (currentChunk.length() + chunk.length() <= targetChunkSize) {
                 if (currentChunk.length() > 0) {
                     currentChunk.append("\n\n");
                 }
@@ -175,7 +183,7 @@ public class DocumentService {
             // 如果不是第一个块，添加前一个块的尾部作为重叠
             if (i > 0) {
                 String previousChunk = chunks.get(i - 1);
-                String overlap = getOverlapText(previousChunk, CHUNK_OVERLAP);
+                String overlap = getOverlapText(previousChunk, chunkOverlap);
                 chunk = overlap + "\n\n" + chunk;
             }
             
