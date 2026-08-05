@@ -2,8 +2,8 @@ package com.example.rag;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
-import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
@@ -17,9 +17,9 @@ public class RagApplication {
     }
 
     @Component
-    static class StartupListener implements ApplicationListener<ContextRefreshedEvent> {
+    static class StartupListener implements ApplicationListener<ApplicationReadyEvent> {
         @Override
-        public void onApplicationEvent(ContextRefreshedEvent event) {
+        public void onApplicationEvent(ApplicationReadyEvent event) {
             Environment env = event.getApplicationContext().getEnvironment();
             String port = env.getProperty("server.port", "8080");
             String contextPath = env.getProperty("server.servlet.context-path", "");

@@ -700,7 +700,8 @@
 
         function updateChatPlaceholder() {
             if (selectedDocumentId) {
-                chatInput.placeholder = `在文档 ${selectedDocumentId.substring(0, 8)}... 中搜索问题...`;
+                const filename = filenameMap[selectedDocumentId] || `文档 ${selectedDocumentId.substring(0, 8)}...`;
+                chatInput.placeholder = `在 ${filename} 中搜索问题...`;
             } else {
                 chatInput.placeholder = '在所有文档中搜索问题...';
             }
@@ -721,7 +722,11 @@
                 : '（针对所有文档）';
             addMessage('user', message, userContextInfo);
             chatInput.value = '';
+            
+            // 禁用按钮并显示加载状态
             sendBtn.disabled = true;
+            const originalBtnText = sendBtn.textContent;
+            sendBtn.textContent = '生成回答中...';
 
             try {
                 const url = selectedDocumentId 
@@ -743,6 +748,7 @@
                 addMessage('assistant', `请求失败: ${error.message}`);
             } finally {
                 sendBtn.disabled = false;
+                sendBtn.textContent = originalBtnText;
             }
         }
 

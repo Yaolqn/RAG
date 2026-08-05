@@ -184,6 +184,7 @@ public class VectorStoreService {
             SearchReq.SearchReqBuilder searchBuilder = SearchReq.builder()
                     .collectionName(collectionName)
                     .annsField(vectorField)
+                    .data(Collections.singletonList(floatVec))
                     .topK(topK)
                     .outputFields(List.of(contentField, sourceField, chunkIndexField, documentIdField));
 
