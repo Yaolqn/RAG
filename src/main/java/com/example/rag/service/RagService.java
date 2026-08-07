@@ -64,17 +64,21 @@ public class RagService {
             String context = retrievalService.formatContext(relevantChunks);
 
             // 构建提示词模板
+            // 回答模板具有溯源功能
             String promptTemplate = """
-                你是一个专业的知识库助手。请根据以下参考信息回答用户的问题。
-                
-                参考信息：
-                %s
-                
-                用户问题：
-                %s
-                
-                如果参考信息中没有相关内容，请明确告知用户，不要编造答案。
-                """.formatted(context, query);
+               【系统提示】
+               你是基于内部文档的问答助手。你的回答必须完全基于给定【文档内容】，并遵循以下规则：
+               1. 在回答中穿插引用来源，格式为【来源：文档X第Y段】或【参考：<原文摘录>】。
+               2. 如果信息来自多个片段，请分别注明。
+               3. 如果【文档内容】中没有相关信息，回复：“抱歉，当前文档中未包含相关信息。”，禁止使用外部知识。
+               4. 回答应条理清晰，优先使用列表或分步骤说明。
+               
+               【用户消息】
+               文档内容：
+               %s
+               
+               用户问题：%s
+               """.formatted(context, query);
 
             // 构建聊天消息
             List<ChatMessage> messages = new ArrayList<>();
