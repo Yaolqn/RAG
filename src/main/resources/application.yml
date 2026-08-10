@@ -90,6 +90,10 @@ retrieval:
     top-k: 5  # 重排序前检索的候选块数量
     final-top-k: 3  # 重排序后返回的最终块数量
     method: keyword  # 重排序方法：keyword（关键词匹配）、semantic（语义相似度）
+  bm25:
+    enabled: false  # 是否启用BM25关键词检索（混合检索）
+    weight: 0.3  # BM25权重（0-1之间，向量检索权重为 1-weight）
+    top-k: 5  # BM25检索的候选块数量
 
 # API重试配置
 retry:

@@ -15,6 +15,8 @@ public class DocumentChunk {
     private int chunkIndex;  // 文档块索引
     private int totalChunks;  // 总文档块数
     private double similarity;  // 相似度分数
+    private double score;  // BM25分数
+    private double hybridScore;  // 混合检索分数
 
     // 无参构造函数
     public DocumentChunk() {
@@ -93,5 +95,21 @@ public class DocumentChunk {
 
     public void setSimilarity(double similarity) {
         this.similarity = similarity;
+    }
+
+    public double getScore() {
+        return score;
+    }
+
+    public void setScore(double score) {
+        this.score = score;
+    }
+
+    public double getHybridScore() {
+        return hybridScore;
+    }
+
+    public void setHybridScore(double hybridScore) {
+        this.hybridScore = hybridScore;
     }
 }

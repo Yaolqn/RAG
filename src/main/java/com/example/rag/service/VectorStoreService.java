@@ -401,4 +401,47 @@ public class VectorStoreService {
             System.err.println("清空集合失败: " + e.getMessage());
         }
     }
+
+    /**
+     * 获取所有文档块（用于BM25索引构建）
+     * 注意：此方法会加载所有数据到内存，数据量大时慎用
+     */
+    public List<DocumentChunk> getAllChunks() {
+        List<DocumentChunk> chunks = new ArrayList<>();
+        try {
+            HasCollectionReq hasReq = HasCollectionReq.builder()
+                    .collectionName(collectionName)
+                    .build();
+            if (!milvusClient.hasCollection(hasReq)) {
+                return chunks;
+            }
+
+            QueryReq queryReq = QueryReq.builder()
+                    .collectionName(collectionName)
+                    .filter(idField + " != ''")
+                    .outputFields(List.of(idField, documentIdField, contentField, sourceField, chunkIndexField))
+                    .limit(10000L)
+                    .build();
+
+            QueryResp resp = milvusClient.query(queryReq);
+            if (resp.getQueryResults() != null) {
+                for (QueryResp.QueryResult result : resp.getQueryResults()) {
+                    DocumentChunk chunk = new DocumentChunk();
+                    chunk.setId((String) result.getEntity().get(idField));
+                    chunk.setDocumentId((String) result.getEntity().get(documentIdField));
+                    chunk.setContent((String) result.getEntity().get(contentField));
+                    chunk.setSource((String) result.getEntity().get(sourceField));
+                    
+                    Object indexObj = result.getEntity().get(chunkIndexField);
+                    if (indexObj != null) chunk.setChunkIndex(((Number) indexObj).intValue());
+                    
+                    chunks.add(chunk);
+                }
+            }
+            System.out.println("从Milvus加载文档块数量: " + chunks.size());
+        } catch (Exception e) {
+            System.err.println("获取所有文档块失败: " + e.getMessage());
+        }
+        return chunks;
+    }
 }

@@ -5,7 +5,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +29,9 @@ public class RetrievalService {
     @Autowired
     private MetricsService metricsService;  // 指标服务
     
+    @Autowired
+    private BM25Service bm25Service;  // BM25关键词检索服务
+    
     @Value("${retrieval.top-k:3}")
     private int defaultTopK;  // 默认检索返回的最相关文档块数量
     
@@ -38,6 +43,15 @@ public class RetrievalService {
     
     @Value("${retrieval.rerank.final-top-k:3}")
     private int rerankFinalTopK;  // 重排序后返回的最终块数量
+    
+    @Value("${retrieval.bm25.enabled:false}")
+    private boolean bm25Enabled;  // 是否启用BM25关键词检索
+    
+    @Value("${retrieval.bm25.weight:0.3}")
+    private double bm25Weight;  // BM25权重（混合检索时）
+    
+    @Value("${retrieval.bm25.top-k:5}")
+    private int bm25TopK;  // BM25检索的候选块数量
 
     /**
  * 根据查询检索相关文档块（使用默认topK，支持重排序）
@@ -68,6 +82,19 @@ public class RetrievalService {
     public List<DocumentChunk> retrieve(String query, int topK, String documentId) {
         long startTime = System.currentTimeMillis();
         
+        // 如果启用BM25，使用混合检索
+        if (bm25Enabled) {
+            return hybridRetrieve(query, topK, documentId, startTime);
+        }
+        
+        // 否则使用纯向量检索
+        return vectorRetrieve(query, topK, documentId, startTime);
+    }
+    
+    /**
+     * 纯向量检索
+     */
+    private List<DocumentChunk> vectorRetrieve(String query, int topK, String documentId, long startTime) {
         // 生成查询的嵌入向量
         List<Float> queryEmbedding = embeddingService.generateEmbedding(query);
         
@@ -97,6 +124,67 @@ public class RetrievalService {
         
         long totalDuration = System.currentTimeMillis() - startTime;
         System.out.println("检索总耗时: " + totalDuration + "ms");
+        
+        return results;
+    }
+    
+    /**
+     * 混合检索（向量 + BM25）
+     */
+    private List<DocumentChunk> hybridRetrieve(String query, int topK, String documentId, long startTime) {
+        System.out.println("启用混合检索（向量 + BM25）");
+        
+        // 1. 向量检索
+        List<Float> queryEmbedding = embeddingService.generateEmbedding(query);
+        List<DocumentChunk> vectorResults = vectorStoreService.similaritySearch(queryEmbedding, bm25TopK, documentId);
+        
+        // 2. BM25检索
+        List<DocumentChunk> bm25Results = bm25Service.search(query, bm25TopK, documentId);
+        
+        // 3. 合并结果并计算混合分数
+        Map<String, DocumentChunk> mergedResults = new HashMap<>();
+        
+        // 归一化向量相似度分数
+        double maxVectorScore = vectorResults.stream()
+                .mapToDouble(DocumentChunk::getSimilarity)
+                .max()
+                .orElse(1.0);
+        
+        for (DocumentChunk chunk : vectorResults) {
+            double normalizedVectorScore = chunk.getSimilarity() / maxVectorScore;
+            chunk.setHybridScore(normalizedVectorScore * (1 - bm25Weight));
+            mergedResults.put(chunk.getId(), chunk);
+        }
+        
+        // 归一化BM25分数
+        double maxBM25Score = bm25Results.stream()
+                .mapToDouble(DocumentChunk::getScore)
+                .max()
+                .orElse(1.0);
+        
+        for (DocumentChunk chunk : bm25Results) {
+            double normalizedBM25Score = chunk.getScore() / maxBM25Score;
+            double bm25Contribution = normalizedBM25Score * bm25Weight;
+            
+            if (mergedResults.containsKey(chunk.getId())) {
+                // 已存在，累加分数
+                DocumentChunk existing = mergedResults.get(chunk.getId());
+                existing.setHybridScore(existing.getHybridScore() + bm25Contribution);
+            } else {
+                // 不存在，添加新结果
+                chunk.setHybridScore(bm25Contribution);
+                mergedResults.put(chunk.getId(), chunk);
+            }
+        }
+        
+        // 4. 按混合分数排序并返回topK
+        List<DocumentChunk> results = mergedResults.values().stream()
+                .sorted((a, b) -> Double.compare(b.getHybridScore(), a.getHybridScore()))
+                .limit(topK)
+                .collect(Collectors.toList());
+        
+        long totalDuration = System.currentTimeMillis() - startTime;
+        System.out.println("混合检索总耗时: " + totalDuration + "ms, 返回文档块数量: " + results.size());
         
         return results;
     }
