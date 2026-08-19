@@ -27,6 +27,7 @@ import java.util.List;
 
 /**
  * BM25关键词检索服务
+ * Lucene全文索引检索服务
  * 使用Lucene实现BM25算法进行关键词匹配检索
  */
 @Service

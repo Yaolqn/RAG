@@ -106,8 +106,8 @@ public class VectorStoreService {
             IndexParam indexParam = IndexParam.builder()
                     .indexName("vector_index")
                     .fieldName(vectorField)
-                    .indexType(IndexParam.IndexType.IVF_FLAT)
-                    .metricType(IndexParam.MetricType.COSINE)
+                    .indexType(IndexParam.IndexType.IVF_FLAT) // 索引类型 IVF_FLAT
+                    .metricType(IndexParam.MetricType.COSINE) // 向量度量类型 余弦
                     .extraParams(Collections.singletonMap("nlist", indexNlist))
                     .build();
 
@@ -187,6 +187,7 @@ public class VectorStoreService {
         try {
             FloatVec floatVec = new FloatVec(queryEmbedding);
 
+            // 构建搜索请求
             SearchReq.SearchReqBuilder searchBuilder = SearchReq.builder()
                     .collectionName(collectionName)
                     .annsField(vectorField)

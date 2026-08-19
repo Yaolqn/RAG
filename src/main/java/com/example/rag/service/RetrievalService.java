@@ -134,11 +134,11 @@ public class RetrievalService {
     private List<DocumentChunk> hybridRetrieve(String query, int topK, String documentId, long startTime) {
         System.out.println("启用混合检索（向量 + BM25）");
         
-        // 1. 向量检索
+        // 1. 向量检索 语义相似度
         List<Float> queryEmbedding = embeddingService.generateEmbedding(query);
         List<DocumentChunk> vectorResults = vectorStoreService.similaritySearch(queryEmbedding, bm25TopK, documentId);
         
-        // 2. BM25检索
+        // 2. BM25检索 关键词
         List<DocumentChunk> bm25Results = bm25Service.search(query, bm25TopK, documentId);
         
         // 3. 合并结果并计算混合分数

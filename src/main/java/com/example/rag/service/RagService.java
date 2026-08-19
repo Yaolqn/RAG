@@ -60,7 +60,7 @@ public class RagService {
         try {
             // 检索相关文档块
             List<DocumentChunk> relevantChunks = retrievalService.retrieve(query, defaultTopK, documentId);
-            // 格式化检索到的上下文
+            // 格式化检索到的上下文 主要是添加来源
             String context = retrievalService.formatContext(relevantChunks);
 
 //            // 构建提示词模板
