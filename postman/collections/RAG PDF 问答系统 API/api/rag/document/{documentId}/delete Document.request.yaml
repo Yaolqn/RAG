@@ -1,0 +1,10 @@
+$kind: http-request
+url: "{{baseUrl}}/api/rag/document/:documentId"
+method: DELETE
+headers:
+  Accept: "*/*"
+pathVariables:
+  documentId: string
+settings: {}
+examples: ./.resources/delete Document.resources/examples
+order: 2000

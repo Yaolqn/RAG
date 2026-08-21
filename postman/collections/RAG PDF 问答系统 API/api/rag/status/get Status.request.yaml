@@ -1,0 +1,8 @@
+$kind: http-request
+url: "{{baseUrl}}/api/rag/status"
+method: GET
+headers:
+  Accept: "*/*"
+settings: {}
+examples: ./.resources/get Status.resources/examples
+order: 1000

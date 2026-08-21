@@ -1,0 +1,10 @@
+$kind: http-request
+url: "{{baseUrl}}/api/rag/document/:documentId/status"
+method: GET
+headers:
+  Accept: "*/*"
+pathVariables:
+  documentId: string
+settings: {}
+examples: ./.resources/get Document Status.resources/examples
+order: 1000

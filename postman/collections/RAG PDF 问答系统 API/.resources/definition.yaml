@@ -1,0 +1,9 @@
+$kind: collection
+description: |-
+  RAG 文档上传、问答与向量库管理接口文档
+
+  **Postman 导入方式：**
+  1. 下载 Postman 文件后导入: [postman_collection.json](/swagger/postman-export)
+  2. 或 Postman -> Import -> Link 填入 [/v3/api-docs](/v3/api-docs)
+variables:
+  baseUrl: http://localhost:8081

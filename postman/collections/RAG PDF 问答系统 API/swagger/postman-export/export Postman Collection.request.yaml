@@ -1,0 +1,8 @@
+$kind: http-request
+url: "{{baseUrl}}/swagger/postman-export"
+method: GET
+headers:
+  Accept: application/json
+settings: {}
+examples: ./.resources/export Postman Collection.resources/examples
+order: 1000

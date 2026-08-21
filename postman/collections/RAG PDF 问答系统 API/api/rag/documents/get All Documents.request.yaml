@@ -1,0 +1,8 @@
+$kind: http-request
+url: "{{baseUrl}}/api/rag/documents"
+method: GET
+headers:
+  Accept: "*/*"
+settings: {}
+examples: ./.resources/get All Documents.resources/examples
+order: 1000

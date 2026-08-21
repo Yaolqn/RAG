@@ -1,0 +1,11 @@
+$kind: http-request
+url: "{{baseUrl}}/api/rag/chat?message=string&documentId=string"
+method: GET
+headers:
+  Accept: "*/*"
+queryParams:
+  message: string
+  documentId: string
+settings: {}
+examples: ./.resources/chat.resources/examples
+order: 1000

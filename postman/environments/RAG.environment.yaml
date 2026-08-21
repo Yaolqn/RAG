@@ -1,0 +1,4 @@
+name: RAG
+values:
+  - key: base_url
+    value: ''

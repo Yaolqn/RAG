@@ -1,0 +1,13 @@
+# Use this workspace to collaborate
+workspace:
+  id: 6602110e-8b19-4ba8-8118-ade3882b93c9
+
+cloudResources:
+  collections:
+    ../postman/collections/RAG PDF 问答系统 API: 0f4bee08-a365-42c9-9b83-9fe74d4a6594
+
+# All resources in the `postman/` folder are automatically registered in Local View.
+# Point to additional files outside the `postman/` folder to register them individually. Example:
+#localResources:
+#  collections:
+#    - ../tests/E2E Test Collection/

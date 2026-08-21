@@ -125,6 +125,15 @@ logging:
     com.example.rag: INFO
     io.milvus: WARN
 
+# Swagger/OpenAPI 配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs  # OpenAPI 规范地址（Postman 可通过 Import -> Link 导入）
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method  # 接口按请求方法排序
+    tags-sorter: alpha
+
 # 服务器端口配置
 server:
   port: 8081

@@ -171,6 +171,8 @@ public class VectorStoreService {
 
         } catch (Exception e) {
             System.err.println("插入失败: " + e.getMessage());
+            // 向上抛出异常，避免调用方收到假成功响应
+            throw new RuntimeException("插入向量失败: " + e.getMessage(), e);
         }
     }
 

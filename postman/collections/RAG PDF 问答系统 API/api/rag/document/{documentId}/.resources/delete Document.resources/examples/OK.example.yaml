@@ -1,0 +1,22 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/api/rag/document/:documentId"
+  method: DELETE
+  headers:
+    Accept: "*/*"
+  pathVariables:
+    documentId: string
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: "*/*"
+  body:
+    type: text
+    content: |-
+      {
+        "key_0": {},
+        "key_1": {},
+        "key_2": {}
+      }
+order: 1000

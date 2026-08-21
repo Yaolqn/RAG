@@ -1,0 +1,8 @@
+$kind: http-request
+url: "{{baseUrl}}/api/rag/clear"
+method: POST
+headers:
+  Accept: "*/*"
+settings: {}
+examples: ./.resources/clear Vector Store.resources/examples
+order: 1000
