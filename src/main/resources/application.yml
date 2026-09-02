@@ -137,3 +137,11 @@ springdoc:
 # 服务器端口配置
 server:
   port: 8081
+
+# Vue 开发服务器配置。Spring Boot 启动后会自动执行 frontend/npm run dev。
+# 生产环境使用 npm run build 后，可设置为 false，仅使用 static 目录中的构建产物。
+frontend:
+  dev:
+    enabled: true
+    directory: frontend
+    port: 5173

@@ -679,6 +679,7 @@ RetrievalService.formatContext() → 格式化上下文
 
 - Java 21
 - Maven 3.x
+- Node.js 18+ 和 npm（用于启动 Vue 开发服务器）
 - 火山引擎 API Key
 - 火山引擎推理端点 ID（嵌入模型和聊天模型）
 - Redis 6.0+（可选，用于缓存）
@@ -727,12 +728,17 @@ mvn spring-boot:run
 
 ```
 📱 前端访问地址: http://localhost:8081/
+🟢 Vue开发地址: http://localhost:5173/
 📚 Swagger API文档: http://localhost:8081/swagger-ui.html
 📄 OpenAPI规范(JSON): http://localhost:8081/v3/api-docs
 📄 上传API: POST http://localhost:8081/api/rag/upload
 💬 问答API: GET http://localhost:8081/api/rag/chat?message=xxx
 📊 Prometheus指标: http://localhost:8081/actuator/prometheus
 ```
+
+`RagApplication` 在 Spring Boot 启动完成后会自动执行 `frontend/npm run dev`，Vue 开发页面通过 Vite 代理访问后端 API。点击控制台中的 `http://localhost:5173/` 即可打开 Vue 页面；`http://localhost:8081/` 是 `npm run build` 生成的静态页面入口。
+
+如果部署环境不需要启动 Node.js 开发服务器，将 `application.yml` 中的 `frontend.dev.enabled` 设置为 `false` 即可。
 
 ### API 使用示例
 
